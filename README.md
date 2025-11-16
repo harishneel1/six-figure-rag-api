@@ -30,3 +30,11 @@ This project is well explained in my course. Check it out here:
 - Run `npx supabase migration new [migration_name]` → This will generate a new migration file where you can define the database schema based on your Entity Relationship Diagram.
 - Run `npx supabase db reset` → This command stops your local database, destroys the current one, creates a fresh database, and then runs **all migration files in order** from the beginning
 - Install dependencies `python-dotenv` and `supabase` - These provide Supabase functions like `create_client()`, `.table()`, and `.insert()`
+
+## 02_ClerkAuth
+
+- Basic setup and configuration of logged-in user routes to access the public and protected pages.
+  Follow these docs: https://clerk.com/docs/nextjs/getting-started/quickstart
+- Payload Structure
+  Follow these docs: https://clerk.com/docs/guides/development/webhooks/overview#payload-structure
+- `/api/user/create`

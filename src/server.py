@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from src.routes.userRoutes import router as userRoutes
 
 # Create FastAPI app
 app = FastAPI(
@@ -17,13 +18,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(userRoutes, prefix="/api/user")
 
-# Health check endpoints
-@app.get("/")
-async def root():
-    return {"message": "Six-Figure AI Engineering app is running!"}
-
-
+"""
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "version": "1.0.0"}
+"""
