@@ -38,3 +38,15 @@ This project is well explained in my course. Check it out here:
 - Payload Structure
   Follow these docs: https://clerk.com/docs/guides/development/webhooks/overview#payload-structure
 - `/api/user/create`
+
+## 03_ProjectsPage
+
+- Install the `clerk-backend-api` dependency
+- `clerkAuth.py` - `get_user_clerk_id` function validates the user
+- Refer to these docs for Clerk:
+  - Visually simple explanation ~ https://clerk.com/changelog/2024-10-08-python-backend-sdk-beta
+  - GitHub official docs ~ https://github.com/clerk/clerk-sdk-python?tab=readme-ov-file#request-authentication
+- API endpoints:
+  - GET `/api/projects/` ~ List all projects
+  - POST `/api/projects/` ~ Create a new project
+  - DELETE `/api/projects/{project_id}` ~ Delete a specific project
