@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from enum import Enum
 
 
@@ -56,3 +56,7 @@ class MessageCreate(BaseModel):
 class MessageRole(str, Enum):
     USER = "user"
     ASSISTANT = "assistant"
+
+
+class QueryVariations(BaseModel):
+    queries: List[str] = Field(..., description="The variations of the query")
