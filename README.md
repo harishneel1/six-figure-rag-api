@@ -111,3 +111,10 @@ Chat Routes
 
 - GET `/api/chats/{chat_id}` ~ Get a specific chat
 - POST `/api/projects/{project_id}/chats/{chat_id}/messages` ~ Send a message to a chat
+
+## 09_Retrieval
+
+- Complete the Basic Retrieval Pipeline; every step is already well documented inside the code.
+- Update the initial_schema by inserting changes before `(embedding vector_ip_ops);` and after `(embedding vector_cosine_ops);`
+- Create a new migration file for the Postgres functions `vector_search_document_chunks` and `keyword_search_document_chunks`.
+- Complete the Advanced Retrieval Pipeline.

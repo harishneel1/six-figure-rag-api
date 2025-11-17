@@ -3,8 +3,8 @@ from src.services.supabase import supabase
 from src.services.clerkAuth import get_current_user_clerk_id
 from src.models.index import ProjectCreate, ProjectSettings
 from src.models.index import MessageCreate, MessageRole
-from langchain_core.messages import SystemMessage, HumanMessage
-from src.services.llm import openAI
+from src.rag.retrieval.index import retrieve_context
+from src.rag.retrieval.utils import prepare_prompt_and_invoke_llm
 
 router = APIRouter(tags=["projectRoutes"])
 """
@@ -395,24 +395,21 @@ async def send_message(
         if not message_creation_result.data:
             raise HTTPException(status_code=422, detail="Failed to create message")
 
-        # Step 3 : Retrieval # TODO
+        # Step 3 : Retrieval
+        texts, images, tables, citations = retrieve_context(project_id, message)
 
         # Step 4 : Generation (Retrived Context + User Message)
-        messages = [
-            SystemMessage(
-                content="You are a helpful assistant who is good at chatting"
-            ),
-            HumanMessage(content=message),
-        ]
-        response = openAI["chat_llm"].invoke(messages)
+        final_response = prepare_prompt_and_invoke_llm(
+            user_query=message, texts=texts, images=images, tables=tables
+        )
 
         # Step 5: Insert the AI Response into the database.
         ai_response_insert_data = {
-            "content": response.content,
+            "content": final_response,
             "chat_id": chat_id,
             "clerk_id": current_user_clerk_id,
             "role": MessageRole.ASSISTANT.value,
-            "citations": [],
+            "citations": citations,
         }
         ai_response_creation_result = (
             supabase.table("messages").insert(ai_response_insert_data).execute()
