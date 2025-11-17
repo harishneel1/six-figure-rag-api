@@ -106,3 +106,8 @@ Chat Routes
 - Whenever we make changes inside a task, we must **restart the Celery server**. Otherwise, the changes will **not be reflected**. Run shell script `sh start_worker.sh` Or in case want to stop all the services `sh stopAll.sh`.
 - Display Specific Project File Chunks
   - GET `/api/projects/{project_id}/files/{file_id}/chunks` ~ Get project document chunks
+
+## 08_Chat
+
+- GET `/api/chats/{chat_id}` ~ Get a specific chat
+- POST `/api/projects/{project_id}/chats/{chat_id}/messages` ~ Send a message to a chat

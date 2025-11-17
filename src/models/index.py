@@ -47,3 +47,12 @@ class ProcessingStatus(str, Enum):
 
 class UrlRequest(BaseModel):
     url: str = Field(..., description="The URL to process")
+
+
+class MessageCreate(BaseModel):
+    content: str = Field(..., description="The content of the message")
+
+
+class MessageRole(str, Enum):
+    USER = "user"
+    ASSISTANT = "assistant"

@@ -1,8 +1,10 @@
-from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from src.services.supabase import supabase
 from src.services.clerkAuth import get_current_user_clerk_id
 from src.models.index import ProjectCreate, ProjectSettings
+from src.models.index import MessageCreate, MessageRole
+from langchain_core.messages import SystemMessage, HumanMessage
+from src.services.llm import openAI
 
 router = APIRouter(tags=["projectRoutes"])
 """
@@ -12,12 +14,12 @@ router = APIRouter(tags=["projectRoutes"])
   - POST `/api/projects/` ~ Create a new project
   - DELETE `/api/projects/{project_id}` ~ Delete a specific project
   
-  - GET `/api/projects/{projectId}` ~ Get specific project data
-  - GET `/api/projects/{projectId}/chats` ~ Get specific project chats
-  - GET `/api/projects/{projectId}/settings` ~ Get specific project settings
+  - GET `/api/projects/{project_id}` ~ Get specific project data
+  - GET `/api/projects/{project_id}/chats` ~ Get specific project chats
+  - GET `/api/projects/{project_id}/settings` ~ Get specific project settings
   
-  - PUT `/api/projects/{projectId}/settings` ~ Update specific project settings
-  
+  - PUT `/api/projects/{project_id}/settings` ~ Update specific project settings
+  - POST `/api/projects/{project_id}/chats/{chat_id}/messages` ~ Send a message to a chat
 """
 
 
@@ -358,4 +360,75 @@ async def update_project_settings(
         raise HTTPException(
             status_code=500,
             detail=f"An internal server error occurred while updating project {project_id} settings: {str(e)}",
+        )
+
+
+@router.post("/{project_id}/chats/{chat_id}/messages")
+async def send_message(
+    project_id: str,
+    chat_id: str,
+    message: MessageCreate,
+    current_user_clerk_id: str = Depends(get_current_user_clerk_id),
+):
+    """
+    ! Logic Flow:
+    * 1. Get current user clerk_id
+    * 2. Insert the message into the database.
+    * 3. Retrieval
+    * 4. Generation (Retrieved Context + User Message)
+    * 5. Insert the AI Response into the database.
+    """
+    try:
+        # Step 1 : Insert the message into the database.
+        message = message.content
+        message_insert_data = {
+            "content": message,
+            "chat_id": chat_id,
+            "clerk_id": current_user_clerk_id,
+            "role": MessageRole.USER.value,
+        }
+        message_creation_result = (
+            supabase.table("messages").insert(message_insert_data).execute()
+        )
+
+        if not message_creation_result.data:
+            raise HTTPException(status_code=422, detail="Failed to create message")
+
+        # Step 3 : Retrieval # TODO
+
+        # Step 4 : Generation (Retrived Context + User Message)
+        messages = [
+            SystemMessage(
+                content="You are a helpful assistant who is good at chatting"
+            ),
+            HumanMessage(content=message),
+        ]
+        response = openAI["chat_llm"].invoke(messages)
+
+        # Step 5: Insert the AI Response into the database.
+        ai_response_insert_data = {
+            "content": response.content,
+            "chat_id": chat_id,
+            "clerk_id": current_user_clerk_id,
+            "role": MessageRole.ASSISTANT.value,
+            "citations": [],
+        }
+        ai_response_creation_result = (
+            supabase.table("messages").insert(ai_response_insert_data).execute()
+        )
+        if not ai_response_creation_result.data:
+            raise HTTPException(status_code=422, detail="Failed to create AI response")
+
+        return {
+            "message": "Message created successfully",
+            "data": {
+                "userMessage": message_creation_result.data[0],
+                "aiMessage": ai_response_creation_result.data[0],
+            },
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"An internal server error occurred while creating message: {str(e)}",
         )
