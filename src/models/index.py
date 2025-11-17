@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional
+from enum import Enum
 
 
 class ProjectCreate(BaseModel):
@@ -24,3 +25,25 @@ class ProjectSettings(BaseModel):
     reranking_model: str = Field(..., description="The reranking model to use")
     vector_weight: float = Field(..., description="The vector weight")
     keyword_weight: float = Field(..., description="The keyword weight")
+
+
+class FileUploadRequest(BaseModel):
+    filename: str = Field(..., description="The name of the file")
+    file_type: str = Field(..., description="The type of the file")
+    file_size: int = Field(..., description="The size of the file")
+
+
+class ProcessingStatus(str, Enum):
+    UPLOADING = "uploading"
+    PENDING = "pending"
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    PARTITIONING = "partitioning"
+    CHUNKING = "chunking"
+    SUMMARISING = "summarising"
+    VECTORIZATION = "vectorization"
+    COMPLETED = "completed"
+
+
+class UrlRequest(BaseModel):
+    url: str = Field(..., description="The URL to process")

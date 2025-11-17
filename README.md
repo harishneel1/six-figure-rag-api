@@ -73,3 +73,19 @@ Chat Routes
 ## 05_SpecificProjectSettings
 
 - PUT `/api/projects/{projectId}/settings` ~ Update specific project settings
+
+## 06_AWS-S3
+
+- AWS S3 is hard to set up for beginners as it requires a credit card, can accidentally rack up charges, and has complex billing
+- S3-compatible providers: Everything works exactly the same - **Tigris Data** - Free, no credit card required, works the same as S3
+- To communicate with S3 in Python, use the `boto3` package
+- Documentation for presigned URLs:
+  - https://boto3.amazonaws.com/v1/documentation/api/latest/guide/s3-presigned-urls.html
+- Designed an architectural best practice to upload documents via presigned URLs
+- Initialized AWS S3 service and API endpoints:
+  - POST `/api/projects/{project_id}/files/upload-url` ~ Generate presigned URL for frontend file upload
+  - POST `/api/projects/{project_id}/files/confirm` ~ Confirm file upload to S3
+- Add Website URL
+  - POST `/api/projects/{project_id}/urls`
+- Delete Document API
+  - DELETE `/api/projects/{project_id}/files/{file_id}` ~ To delete the document
