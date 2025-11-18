@@ -36,6 +36,9 @@ async def get_projects(current_user_clerk_id: str = Depends(get_current_user_cle
             "data": projects_query_result.data or [],
         }
 
+    except HTTPException as e:
+        raise e
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -112,6 +115,9 @@ async def create_project(
             "data": newly_created_project,
         }
 
+    except HTTPException as e:
+        raise e
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -168,6 +174,9 @@ async def delete_project(
             "message": "Project deleted successfully",
             "data": successfully_deleted_project,
         }
+
+    except HTTPException as e:
+        raise e
 
     except Exception as e:
         raise HTTPException(
