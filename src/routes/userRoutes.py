@@ -68,6 +68,7 @@ async def create_user(clerk_webhook_data: dict):
 
     except HTTPException:
         raise
+
     except Exception as e:
         raise HTTPException(
             status_code=500,

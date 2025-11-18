@@ -41,6 +41,8 @@ async def get_project_files(
             "message": "Project files retrieved successfully",
             "data": project_files_result.data or [],
         }
+    except HTTPException as e:
+        raise e
 
     except Exception as e:
         raise HTTPException(

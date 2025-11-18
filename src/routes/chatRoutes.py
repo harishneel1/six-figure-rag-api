@@ -44,6 +44,8 @@ async def create_chat(
             "message": "Chat created successfully",
             "data": chat_creation_result.data[0],
         }
+    except HTTPException as e:
+        raise e
 
     except Exception as e:
         raise HTTPException(
@@ -81,6 +83,8 @@ async def delete_chat(
             "message": "Chat deleted successfully",
             "data": chat_deletion_result.data[0],
         }
+    except HTTPException as e:
+        raise e
 
     except Exception as e:
         raise HTTPException(
