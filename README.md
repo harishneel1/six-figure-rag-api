@@ -1,12 +1,12 @@
-# Six Figure RAG API
-
-Hi 👋 I'm Harish Neel!
-
-This project is well explained in my course. Check it out here:
-
-👉 [Six Figure RAG Course](https://harishneel.com/six-figure-rag)
-
 ## 00_Setup
+
+### Setup
+
+1. Install Poetry (if not already installed)
+2. Install dependencies: `poetry install`
+3. Start server: `./start_server.sh`
+
+### Summary
 
 - Poetry initialization with FastAPI and Uvicorn
 - Boilerplate code for FastAPI server
