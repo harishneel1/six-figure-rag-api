@@ -1,5 +1,3 @@
-# TODO : To remove unnecessary imports
-from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from src.services.supabase import supabase
 from src.services.clerkAuth import get_current_user_clerk_id
@@ -41,6 +39,9 @@ async def get_project_files(
             "message": "Project files retrieved successfully",
             "data": project_files_result.data or [],
         }
+
+    except HTTPException as e:
+        raise e
 
     except Exception as e:
         raise HTTPException(
