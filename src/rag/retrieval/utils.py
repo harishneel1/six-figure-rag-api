@@ -34,7 +34,7 @@ def get_project_document_ids(project_id):
         )
 
         if not document_ids_result.data:
-            raise HTTPException(status_code=404, detail="Document IDs not found")
+            return []
 
         document_ids = [document["id"] for document in document_ids_result.data]
         return document_ids
