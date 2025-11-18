@@ -1,30 +1,31 @@
-# Six Figure RAG API
-
-Hi 👋 I'm Harish Neel!
-
-This project is well explained in my course. Check it out here:
-
-👉 [Six Figure RAG Course](https://harishneel.com/six-figure-rag)
-
-## 00_Setup
-
-- Poetry initialization with FastAPI and Uvicorn
-- Boilerplate code for FastAPI server
-- Shell script to easily start the development server
-- `.gitignore` file to exclude `__pycache__`, `poetry.lock`, and other unnecessary files
-
 ## 01_Supabase
+
+### Setup & Summary
 
 - Ensure you have Docker and Node.js installed
 - Run `npx supabase init` → This creates the **Supabase** folder
 - Run `npx supabase start` → This spins up Docker containers with **Postgres**, **Auth**, **APIs**, etc. Everything needed to set up Supabase locally
+- Install Python dependencies:
+  ```bash
+  poetry install
+  ```
 - Create a `.env` file with the following required variables:
 
-  - `API_URL=` - Your Supabase API URL
-  - `SECRET_KEY=` - Your Supabase secret key
+  **Option 1:** Copy from example file (if available):
 
-  > ⚠️ **Note**: Supabase has updated their naming. The old variable `service_role key` from the video is now simply called `Secret Key`.
+  ```bash
+  cp .env.example .env
+  ```
 
+  Then update the values in `.env` file.
+
+  **Option 2:** Create manually with the following variables:
+
+  - `SUPABASE_API_URL=` - Your Supabase API URL
+  - `SUPABASE_SECRET_KEY=` - Your Supabase secret key
+
+  > ### **Note**: Supabase has updated their naming. The old variable `service_role key` from the video is now simply called `Secret Key`.
+  >
   > 📸 [Reference screenshot](https://ik.imagekit.io/5wegcvcxp/HarishNeel/supabase-credentials.png)
 
 - Run `npx supabase migration new [migration_name]` → This will generate a new migration file where you can define the database schema based on your Entity Relationship Diagram.
