@@ -8,19 +8,24 @@
    poetry install
    ```
 
-2. **Set up Clerk Account:**
+2. **Create a `.env` file:**
 
-   - Create account at https://clerk.com
-   - Create a new application
-   - Get your Clerk API keys from the dashboard
+   ```bash
+   cp .env.sample .env
+   ```
+
+   Then update the values in `.env` file with your configuration.
+
+   > 💡 **Tip:** Get your Supabase credentials by running `npx supabase status` after starting Supabase locally.
+   >
+   > ⚠️ **Note:** Supabase has updated their naming. The old variable `service_role key` is now simply called `Secret Key`.  
+   >  📸 [Reference screenshot](https://ik.imagekit.io/5wegcvcxp/HarishNeel/supabase-credentials.png)
 
 3. **Start the Server:**
 
    ```bash
    sh start_server.sh
    ```
-
-   Or manually: `poetry run uvicorn src.server:app --reload --host 0.0.0.0 --port 8000`
 
 ### Summary
 
