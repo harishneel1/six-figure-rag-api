@@ -14,7 +14,7 @@
   **Option 1:** Copy from example file (if available):
 
   ```bash
-  cp .env.example .env
+  cp .env.sample .env
   ```
 
   Then update the values in `.env` file.
