@@ -1,6 +1,8 @@
 from typing import Dict, List
 from fastapi import APIRouter, HTTPException, Depends
 from src.agents.simple_agent.agent import create_simple_rag_agent
+from src.agents.supervisor_agent.agent import create_supervisor_agent
+
 from src.services.supabase import supabase
 from src.services.clerkAuth import get_current_user_clerk_id
 from src.models.index import ProjectCreate, ProjectSettings
@@ -446,8 +448,8 @@ async def send_message(
         
         # Step 2 : Get project settings to retrieve agent_type
         try:
-            project_settings = get_project_settings(project_id)
-            agent_type = project_settings.get("agent_type", "simple")
+            project_settings = await get_project_settings(project_id)
+            agent_type = project_settings["data"].get("agent_type", "simple")
         except Exception as e:
             # Default to "simple" if settings retrieval fails
             agent_type = "simple"
@@ -455,14 +457,20 @@ async def send_message(
         # Step 3 : Get chat history (excluding current message)
         chat_history = get_chat_history(chat_id, exclude_message_id=current_message_id)
         
-        # Step 4 : Invoke the simple agent
-        # Create the agent with chat history context
-        agent = create_simple_rag_agent(
-            project_id=project_id,
-            model="gpt-4o",
-            chat_history=chat_history
-        )
-        
+        # Step 4: Invoke the appropriate agent based on agent_type
+        if agent_type == "simple":
+            agent = create_simple_rag_agent(
+                project_id=project_id,
+                model="gpt-4o",
+                chat_history=chat_history
+            )
+        elif agent_type == "agentic":
+            agent = create_supervisor_agent(
+                project_id=project_id,
+                model="gpt-4o",
+                chat_history=chat_history
+            )
+
         # Invoke the agent with the user's message
         result = agent.invoke({
             "messages": [{"role": "user", "content": message_content}]
