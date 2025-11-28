@@ -51,6 +51,9 @@ async def get_project_files(
             "data": project_files_result.data or [],
         }
 
+    except HTTPException as e:
+        raise e
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -150,6 +153,9 @@ async def get_upload_presigned_url(
             },
         }
 
+    except HTTPException as e:
+        raise e
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -233,6 +239,9 @@ async def confirm_file_upload_to_s3(
             "message": "File upload to S3 confirmed successfully And Started Background Pre-Processing of this file",
             "data": document_update_result.data[0],
         }
+
+    except HTTPException as e:
+        raise e
 
     except Exception as e:
         raise HTTPException(
@@ -320,6 +329,9 @@ async def process_url(
             "data": document_creation_result.data[0],
         }
 
+    except HTTPException as e:
+        raise e
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -383,6 +395,9 @@ async def delete_project_document(
             "data": document_deletion_result.data[0],
         }
 
+    except HTTPException as e:
+        raise e
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -431,6 +446,10 @@ async def get_project_document_chunks(
             "message": "Project document chunks retrieved successfully",
             "data": document_chunks_result.data or [],
         }
+
+    except HTTPException as e:
+        raise e
+
     except Exception as e:
         raise HTTPException(
             status_code=500,

@@ -46,6 +46,9 @@ async def get_projects(current_user_clerk_id: str = Depends(get_current_user_cle
             "data": projects_query_result.data or [],
         }
 
+    except HTTPException as e:
+        raise e
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -122,6 +125,9 @@ async def create_project(
             "data": newly_created_project,
         }
 
+    except HTTPException as e:
+        raise e
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -179,6 +185,9 @@ async def delete_project(
             "data": successfully_deleted_project,
         }
 
+    except HTTPException as e:
+        raise e
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -216,6 +225,9 @@ async def get_project(
             "data": project_result.data[0],
         }
 
+    except HTTPException as e:
+        raise e
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -250,6 +262,9 @@ async def get_project_chats(
             "message": "Project chats retrieved successfully",
             "data": project_chats_result.data or [],
         }
+
+    except HTTPException as e:
+        raise e
 
     except Exception as e:
         raise HTTPException(
@@ -287,6 +302,9 @@ async def get_project_settings(
             "message": "Project settings retrieved successfully",
             "data": project_settings_result.data[0],
         }
+
+    except HTTPException as e:
+        raise e
 
     except Exception as e:
         raise HTTPException(
@@ -357,6 +375,9 @@ async def update_project_settings(
             "message": "Project settings updated successfully",
             "data": project_settings_update_result.data[0],
         }
+
+    except HTTPException as e:
+        raise e
 
     except Exception as e:
         raise HTTPException(
@@ -502,6 +523,9 @@ async def send_message(
                 "aiMessage": ai_response_creation_result.data[0],
             },
         }
+
+    except HTTPException as e:
+        raise e
 
     except Exception as e:
         raise HTTPException(
