@@ -1,10 +1,12 @@
+from typing import Dict, List
 from fastapi import APIRouter, HTTPException, Depends
+from src.agents.simple_agent.agent import create_simple_rag_agent
+from src.agents.supervisor_agent.agent import create_supervisor_agent
+
 from src.services.supabase import supabase
 from src.services.clerkAuth import get_current_user_clerk_id
 from src.models.index import ProjectCreate, ProjectSettings
 from src.models.index import MessageCreate, MessageRole
-from src.rag.retrieval.index import retrieve_context
-from src.rag.retrieval.utils import prepare_prompt_and_invoke_llm
 
 router = APIRouter(tags=["projectRoutes"])
 """
@@ -22,7 +24,6 @@ router = APIRouter(tags=["projectRoutes"])
   - POST `/api/projects/{project_id}/chats/{chat_id}/messages` ~ Send a message to a Specific Chat
   
 """
-
 
 @router.get("/")
 async def get_projects(current_user_clerk_id: str = Depends(get_current_user_clerk_id)):
@@ -384,6 +385,54 @@ async def update_project_settings(
             detail=f"An internal server error occurred while updating project {project_id} settings: {str(e)}",
         )
 
+def get_chat_history(chat_id: str, exclude_message_id: str = None) -> List[Dict[str, str]]:
+    """
+    Fetch and format chat history for agent context.
+    
+    Retrieves the last 10 messages (5 user + 5 assistant) from the chat,
+    excluding the current message being processed.
+    
+    Args:
+        chat_id: The ID of the chat
+        exclude_message_id: Optional message ID to exclude from history
+        
+    Returns:
+        List of message dictionaries with 'role' and 'content' keys
+    """
+    try:
+        query = (
+            supabase.table("messages")
+            .select("id, role, content")
+            .eq("chat_id", chat_id)
+            .order("created_at", desc=False)
+        )
+        
+        # Exclude current message if provided
+        if exclude_message_id:
+            query = query.neq("id", exclude_message_id)
+        
+        messages_result = query.execute()
+        
+        if not messages_result.data:
+            return []
+        
+        # Get last 10 messages (limit to 10 total messages)
+        recent_messages = messages_result.data[-10:]
+        
+        # Format messages for agent
+        formatted_history = []
+        for msg in recent_messages:
+            formatted_history.append({
+                "role": msg.get("role", "user"),
+                "content": msg.get("content", "")
+            })
+        
+        return formatted_history
+    except Exception:
+        # If history retrieval fails, return empty list
+        return []
+
+
 
 @router.post("/{project_id}/chats/{chat_id}/messages")
 async def send_message(
@@ -393,18 +442,19 @@ async def send_message(
     current_user_clerk_id: str = Depends(get_current_user_clerk_id),
 ):
     """
-    ! Logic Flow:
-    * 1. Get current user clerk_id
-    * 2. Insert the message into the database.
-    * 3. Retrieval
-    * 4. Generation (Retrieved Context + User Message)
-    * 5. Insert the AI Response into the database.
+    Step 1 : Insert the message into the database.
+    Step 2 : Get user's project settings from the database (to retrieve agent_type).
+    Step 3 : Get chat history for context.
+    Step 4 : Invoke the simple agent with the user's message.
+    Step 5 : Insert the AI Response into the database after invocation completes.
+    
+    Returns a JSON response with the user message and AI response.
     """
     try:
         # Step 1 : Insert the message into the database.
-        message = message.content
+        message_content = message.content
         message_insert_data = {
-            "content": message,
+            "content": message_content,
             "chat_id": chat_id,
             "clerk_id": current_user_clerk_id,
             "role": MessageRole.USER.value,
@@ -412,18 +462,45 @@ async def send_message(
         message_creation_result = (
             supabase.table("messages").insert(message_insert_data).execute()
         )
-
         if not message_creation_result.data:
             raise HTTPException(status_code=422, detail="Failed to create message")
+        
+        current_message_id = message_creation_result.data[0]["id"]
+        
+        # Step 2 : Get project settings to retrieve agent_type
+        try:
+            project_settings = await get_project_settings(project_id)
+            agent_type = project_settings["data"].get("agent_type", "simple")
+        except Exception as e:
+            # Default to "simple" if settings retrieval fails
+            agent_type = "simple"
+            
+        # Step 3 : Get chat history (excluding current message)
+        chat_history = get_chat_history(chat_id, exclude_message_id=current_message_id)
+        
+        # Step 4: Invoke the appropriate agent based on agent_type
+        if agent_type == "simple":
+            agent = create_simple_rag_agent(
+                project_id=project_id,
+                model="gpt-4o",
+                chat_history=chat_history
+            )
+        elif agent_type == "agentic":
+            agent = create_supervisor_agent(
+                project_id=project_id,
+                model="gpt-4o",
+                chat_history=chat_history
+            )
 
-        # Step 3 : Retrieval
-        texts, images, tables, citations = retrieve_context(project_id, message)
-
-        # Step 4 : Generation (Retrived Context + User Message)
-        final_response = prepare_prompt_and_invoke_llm(
-            user_query=message, texts=texts, images=images, tables=tables
-        )
-
+        # Invoke the agent with the user's message
+        result = agent.invoke({
+            "messages": [{"role": "user", "content": message_content}]
+        })
+        
+        # Extract the final response and citations from the result
+        final_response = result["messages"][-1].content
+        citations = result.get("citations", [])
+        
         # Step 5: Insert the AI Response into the database.
         ai_response_insert_data = {
             "content": final_response,
@@ -432,6 +509,7 @@ async def send_message(
             "role": MessageRole.ASSISTANT.value,
             "citations": citations,
         }
+
         ai_response_creation_result = (
             supabase.table("messages").insert(ai_response_insert_data).execute()
         )
