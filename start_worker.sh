@@ -10,7 +10,7 @@ export PATH="/opt/homebrew/bin:$PATH"
 echo "Starting Celery Worker (foreground)..."
 
 run_celery () {
-  "$1" -A src.services.celery:celery_app worker --loglevel=info --pool=threads
+  "$1" -A src.services.celery:celery_app worker --loglevel=info --pool=threads --without-gossip --without-mingle --without-heartbeat
 }
 
 # Try Poetry-managed environment first
