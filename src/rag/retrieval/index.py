@@ -8,7 +8,9 @@ from src.rag.retrieval.utils import (
     generate_query_variations,
 )
 from typing import List, Dict
-from src.rag.retrieval.utils import rrf_rank_and_fuse
+from src.config.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def retrieve_context(project_id, user_query):
@@ -25,50 +27,40 @@ def retrieve_context(project_id, user_query):
         """
         # Step 1: Get user's project settings from the database.
         project_settings = get_project_settings(project_id)
+        strategy = project_settings["rag_strategy"]
+        logger.info("project_settings_retrieved", project_id=project_id, strategy=strategy, final_context_size=project_settings["final_context_size"])
 
         # Step 2: Retrieve the document IDs for the current project.
         document_ids = get_project_document_ids(project_id)
-        # print("Found document IDs: ", len(document_ids))
+        logger.info("documents_found", project_id=project_id, document_count=len(document_ids))
 
-        # Step 4 & 5: Execute search based on selected strategy.
-        strategy = project_settings["rag_strategy"]
         chunks = []
         if strategy == "basic":
             # Basic RAG Strategy: Vector search only
             chunks = vector_search(user_query, document_ids, project_settings)
-            print(f"Vector search resulted in: {len(chunks)} chunks")
-
+            logger.info("vector_search_completed", project_id=project_id, chunks_found=len(chunks))
         elif strategy == "hybrid":
             # Hybrid RAG Strategy: Combines vector + keyword search with RRF ranking
             chunks = hybrid_search(user_query, document_ids, project_settings)
-            print(f"Hybrid search resulted in: {len(chunks)} chunks")
-
-        # Step 6: Multi-query vector search
+            logger.info("hybrid_search_completed", project_id=project_id, chunks_found=len(chunks))
         elif strategy == "multi-query-vector":
-            chunks = multi_query_vector_search(
-                user_query, document_ids, project_settings
-            )
-            print(f"Multi-query vector search resulted in: {len(chunks)} chunks")
-
-        # Step 7: Multi-query hybrid search
+            chunks = multi_query_vector_search(user_query, document_ids, project_settings)
+            logger.info("multi_query_vector_search_completed", project_id=project_id, chunks_found=len(chunks))
         elif strategy == "multi-query-hybrid":
-            chunks = multi_query_hybrid_search(
-                user_query, document_ids, project_settings
-            )
-            print(f"Multi-query hybrid search resulted in: {len(chunks)} chunks")
+            chunks = multi_query_hybrid_search(user_query, document_ids, project_settings)
+            logger.info("multi_query_hybrid_search_completed", project_id=project_id, chunks_found=len(chunks))
 
         # Step 8: Selecting top k chunks
         chunks = chunks[: project_settings["final_context_size"]]
+        logger.info("chunks_limited", project_id=project_id, final_chunk_count=len(chunks))
 
-        # Step 9: Build the context from the retrieved chunks and format them into a structured context with citations.
         texts, images, tables, citations = build_context_from_retrieved_chunks(chunks)
-        # validate_context_from_retrieved_chunks(texts, images, tables, citations)
+        logger.info("retrieval_completed", project_id=project_id, texts_count=len(texts), images_count=len(images), tables_count=len(tables), citations_count=len(citations))
 
         return texts, images, tables, citations
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed in RAG's Retrieval: {str(e)}"
-        )
+        logger.error("retrieval_failed", project_id=project_id, error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed in RAG's Retrieval: {str(e)}")
 
 
 def vector_search(user_query, document_ids, project_settings):
@@ -105,52 +97,37 @@ def hybrid_search(query: str, document_ids: List[str], settings: dict) -> List[D
     # Get results from both search methods
     vector_results = vector_search(query, document_ids, settings)
     keyword_results = keyword_search(query, document_ids, settings)
-
-    print(f"📈 Vector search returned: {len(vector_results)} chunks")
-    print(f"📈 Keyword search returned: {len(keyword_results)} chunks")
-
-    # Combine using RRF with configured weights
-    return rrf_rank_and_fuse(
-        [vector_results, keyword_results],
-        [settings["vector_weight"], settings["keyword_weight"]],
-    )
+    logger.info("hybrid_search_results", vector_count=len(vector_results), keyword_count=len(keyword_results))
+    return rrf_rank_and_fuse([vector_results, keyword_results], [settings["vector_weight"], settings["keyword_weight"]])
 
 
 def multi_query_vector_search(user_query, document_ids, project_settings):
     """Execute multi-query vector search using query variations"""
-    queries = generate_query_variations(
-        user_query, project_settings["number_of_queries"]
-    )
-    print(f"Generated {len(queries)} query variations")
+    queries = generate_query_variations(user_query, project_settings["number_of_queries"])
+    logger.info("query_variations_generated", query_count=len(queries))
 
     all_chunks = []
     for index, query in enumerate(queries):
         chunks = vector_search(query, document_ids, project_settings)
         all_chunks.append(chunks)
-        print(
-            f"Vector search for query {index+1}/{len(queries)}: {query} resulted in: {len(chunks)} chunks"
-        )
+        logger.info("query_variation_search", query_num=f"{index+1}/{len(queries)}", query=query, chunks_found=len(chunks))
 
     final_chunks = rrf_rank_and_fuse(all_chunks)
-    print(f"RRF Fusion returned {len(final_chunks)} chunks")
+    logger.info("rrf_fusion_completed", final_chunks_count=len(final_chunks))
     return final_chunks
 
 
 def multi_query_hybrid_search(user_query, document_ids, project_settings):
     """Execute multi-query hybrid search using query variations"""
-    queries = generate_query_variations(
-        user_query, project_settings["number_of_queries"]
-    )
-    print(f"Generated {len(queries)} query variations for hybrid search")
+    queries = generate_query_variations(user_query, project_settings["number_of_queries"])
+    logger.info("query_variations_generated_hybrid", query_count=len(queries))
 
     all_chunks = []
     for index, query in enumerate(queries):
         chunks = hybrid_search(query, document_ids, project_settings)
         all_chunks.append(chunks)
-        print(
-            f"Hybrid search for query {index+1}/{len(queries)}: {query} resulted in: {len(chunks)} chunks"
-        )
+        logger.info("hybrid_query_variation_search", query_num=f"{index+1}/{len(queries)}", query=query, chunks_found=len(chunks))
 
     final_chunks = rrf_rank_and_fuse(all_chunks)
-    print(f"RRF Fusion returned {len(final_chunks)} chunks")
+    logger.info("rrf_fusion_completed_hybrid", final_chunks_count=len(final_chunks))
     return final_chunks

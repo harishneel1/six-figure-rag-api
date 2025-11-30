@@ -7,7 +7,7 @@ readme = "README.md"
 package-mode = false
 
 [tool.poetry.dependencies]
-python = ">=3.10,<4.0"
+python = ">=3.10,<3.14"
 fastapi = ">=0.121.2,<0.122.0"
 uvicorn = ">=0.38.0,<0.39.0"
 supabase = ">=2.24.0,<3.0.0"
@@ -24,6 +24,7 @@ redis = "^7.0.1"
 ipykernel = "^7.1.0"
 ddgs = "^9.9.1"
 langchain-tavily = "^0.2.13"
+structlog = "^24.4.0"
 
 
 [build-system]
