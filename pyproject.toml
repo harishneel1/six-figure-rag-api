@@ -24,6 +24,8 @@ redis = "^7.0.1"
 ipykernel = "^7.1.0"
 ddgs = "^9.9.1"
 langchain-tavily = "^0.2.13"
+ragas = "^0.4.0"
+datasets = "^4.4.1"
 
 
 [build-system]
