@@ -25,6 +25,7 @@ ipykernel = "^7.1.0"
 ddgs = "^9.9.1"
 langchain-tavily = "^0.2.13"
 structlog = "^24.4.0"
+ddtrace = "^2.18.0"
 
 
 [build-system]

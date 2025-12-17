@@ -8,6 +8,13 @@ from typing import Optional
 import structlog
 from structlog.types import EventDict, WrappedLogger
 
+# Datadog trace correlation
+try:
+    from ddtrace import tracer
+    DD_TRACE_AVAILABLE = True
+except ImportError:
+    DD_TRACE_AVAILABLE = False
+
 # Context variables
 request_id_var: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
 
@@ -31,6 +38,18 @@ def add_context_info(logger: WrappedLogger, method_name: str, event_dict: EventD
         event_dict["request_id"] = request_id
     event_dict["pod_name"] = POD_NAME
     event_dict["host_name"] = HOST_NAME
+
+    # Add Datadog trace correlation
+    if DD_TRACE_AVAILABLE:
+        from ddtrace import tracer
+        span = tracer.current_span()
+        if span:
+            event_dict["dd.trace_id"] = str(span.trace_id)
+            event_dict["dd.span_id"] = str(span.span_id)
+            event_dict["dd.service"] = os.getenv("DD_SERVICE", "rag-api")
+            event_dict["dd.env"] = os.getenv("DD_ENV", "development")
+            event_dict["dd.version"] = os.getenv("DD_VERSION", "1.0.0")
+
     return event_dict
 
 

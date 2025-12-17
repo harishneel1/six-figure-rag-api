@@ -1,71 +1,140 @@
-version: '3.8'
+# version: '3.8'
+
+# services:
+#   elasticsearch:
+#     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+#     container_name: elasticsearch
+#     environment:
+#       - discovery.type=single-node
+#       - xpack.security.enabled=false
+#       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+#     ports:
+#       - "9200:9200"
+#     volumes:
+#       - elasticsearch_data:/usr/share/elasticsearch/data
+#     networks:
+#       - elk
+#     healthcheck:
+#       test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+#       interval: 30s
+#       timeout: 10s
+#       retries: 5
+
+#   logstash:
+#     image: docker.elastic.co/logstash/logstash:8.11.1
+#     container_name: logstash
+#     volumes:
+#       - ./elk/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+#     ports:
+#       - "5044:5044"
+#     environment:
+#       - "LS_JAVA_OPTS=-Xmx256m -Xms256m"
+#     networks:
+#       - elk
+#     depends_on:
+#       elasticsearch:
+#         condition: service_healthy
+
+#   kibana:
+#     image: docker.elastic.co/kibana/kibana:8.11.1
+#     container_name: kibana
+#     ports:
+#       - "5601:5601"
+#     environment:
+#       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+#     networks:
+#       - elk
+#     depends_on:
+#       elasticsearch:
+#         condition: service_healthy
+
+#   filebeat:
+#     image: docker.elastic.co/beats/filebeat:8.11.1
+#     container_name: filebeat
+#     user: root
+#     volumes:
+#       - ./elk/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+#       - ./logs:/var/log/app:ro #read from cloud watch in production
+#       - filebeat_data:/usr/share/filebeat/data
+#     networks:
+#       - elk
+#     depends_on:
+#       - logstash
+#     command: filebeat -e -strict.perms=false
+
+# networks:
+#   elk:
+#     driver: bridge
+
+# volumes:
+#   elasticsearch_data:
+#   filebeat_data:
+
+x-common-build: &common-build
+  context: .
+  dockerfile: Dockerfile
 
 services:
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
-    container_name: elasticsearch
+  datadog:
+    image: gcr.io/datadoghq/agent:7
+    container_name: datadog-agent
     environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
+      - DD_API_KEY=${DD_API_KEY}
+      - DD_SITE=${DD_SITE:-datadoghq.com}
+      - DD_LOGS_ENABLED=true
+      - DD_LOGS_CONFIG_CONTAINER_COLLECT_ALL=true
+      - DD_LOGS_CONFIG_AUTO_MULTI_LINE_DETECTION=true
+      - DD_CONTAINER_EXCLUDE_LOGS=name:datadog-agent
+      - DD_APM_ENABLED=true
+      - DD_APM_NON_LOCAL_TRAFFIC=true
+      - DD_DOGSTATSD_NON_LOCAL_TRAFFIC=true
     volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
-    networks:
-      - elk
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - datadog-agent-run:/opt/datadog-agent/run:rw
+    restart: unless-stopped
 
-  logstash:
-    image: docker.elastic.co/logstash/logstash:8.11.1
-    container_name: logstash
-    volumes:
-      - ./elk/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+  api:
+    build: *common-build
+    container_name: rag-api
     ports:
-      - "5044:5044"
+      - "8000:8000"
+    env_file:
+      - .env
     environment:
-      - "LS_JAVA_OPTS=-Xmx256m -Xms256m"
-    networks:
-      - elk
+      - DD_AGENT_HOST=datadog
+      - DD_TRACE_AGENT_PORT=8126
+      - DD_SERVICE=rag-api
+      - DD_ENV=${DD_ENV:-development}
+      - DD_VERSION=${DD_VERSION:-1.0.0}
+    labels:
+      com.datadoghq.ad.logs: '[{"source": "python", "service": "rag-api"}]'
+    command: uvicorn src.server:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
-      elasticsearch:
-        condition: service_healthy
+      - datadog
 
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.11.1
-    container_name: kibana
-    ports:
-      - "5601:5601"
+  # Single worker service — scale this
+  worker:
+    build: *common-build
+    env_file:
+      - .env
     environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-    networks:
-      - elk
+      - DD_AGENT_HOST=datadog
+      - DD_TRACE_AGENT_PORT=8126
+      - DD_SERVICE=rag-worker
+      - DD_ENV=${DD_ENV:-development}
+      - DD_VERSION=${DD_VERSION:-1.0.0}
+    labels:
+      com.datadoghq.ad.logs: '[{"source": "python", "service": "rag-worker"}]'
+    command: >
+      celery -A src.services.celery:celery_app worker
+      --loglevel=info
+      --pool=threads
     depends_on:
-      elasticsearch:
-        condition: service_healthy
-
-  filebeat:
-    image: docker.elastic.co/beats/filebeat:8.11.1
-    container_name: filebeat
-    user: root
-    volumes:
-      - ./elk/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
-      - ./logs:/var/log/app:ro #read from cloud watch in production
-      - filebeat_data:/usr/share/filebeat/data
-    networks:
-      - elk
-    depends_on:
-      - logstash
-    command: filebeat -e -strict.perms=false
+      - datadog
 
 networks:
-  elk:
-    driver: bridge
+  default:
+    name: rag-network
 
 volumes:
-  elasticsearch_data:
-  filebeat_data:
+  datadog-agent-run:
