@@ -70,6 +70,13 @@ def update_status_in_database(
     """
     Update the project document record with the new status and details.
     """
+    logger.info(
+        "updating_document_status",
+        document_id=document_id,
+        status=status.value,
+        has_details=details is not None
+    )
+
     try:
         # Get the project document record
         document_result = (
@@ -79,6 +86,11 @@ def update_status_in_database(
             .execute()
         )
         if not document_result.data:
+            logger.error(
+                "document_not_found",
+                document_id=document_id,
+                status=status.value
+            )
             raise Exception(
                 f"Failed to get project document record with id: {document_id}"
             )
@@ -93,6 +105,11 @@ def update_status_in_database(
             current_details.update(
                 details
             )  # Note : update() - built-in dict method that merges another dictionary into the current one.
+            logger.debug(
+                "merged_processing_details",
+                document_id=document_id,
+                details_keys=list(details.keys())
+            )
 
         # Update the project document record with the new details
         document_update_result = (
@@ -108,11 +125,30 @@ def update_status_in_database(
         )
 
         if not document_update_result.data:
+            logger.error(
+                "status_update_failed",
+                document_id=document_id,
+                status=status.value
+            )
             raise Exception(
                 f"Failed to update project document record with id: {document_id}"
             )
 
+        logger.info(
+            "document_status_updated_successfully",
+            document_id=document_id,
+            status=status.value,
+            details_count=len(current_details)
+        )
+
     except Exception as e:
+        logger.error(
+            "update_status_error",
+            document_id=document_id,
+            status=status.value,
+            error=str(e),
+            exc_info=True
+        )
         raise Exception(f"Failed to update status in database: {str(e)}")
 
 
