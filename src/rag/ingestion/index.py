@@ -4,16 +4,13 @@ import time
 from src.services.llm import openAI
 from src.services.awsS3 import s3_client
 from src.config.index import appConfig
-from src.rag.ingestion.utils import (
-    partition_document,
-    analyze_elements,
-    separate_content_types,
-    get_page_number,
-    create_ai_summary,
-)
+from src.rag.ingestion.utils import partition_document, analyze_elements, separate_content_types, get_page_number, create_ai_summary
 from src.models.index import ProcessingStatus
 from unstructured.chunking.title import chunk_by_title
 from src.services.webScrapper import scrapingbee_client
+from src.config.logging import get_logger, set_project_id
+
+logger = get_logger(__name__)
 
 
 def process_document(document_id: str):
@@ -25,64 +22,46 @@ def process_document(document_id: str):
     * Update the project document record with the processing_status and processing_details as needed.
     *   - `processing_details` : What type of elements or metadata did we retrieve from the document to show in the UI.
     """
+    logger.info("document_processing_started", document_id=document_id)
 
     try:
         update_status_in_database(document_id, ProcessingStatus.PROCESSING)
 
-        document_result = (
-            supabase.table("project_documents")
-            .select("*")
-            .eq("id", document_id)
-            .execute()
-        )
+        document_result = supabase.table("project_documents").select("*").eq("id", document_id).execute()
         if not document_result.data:
-            raise Exception(
-                f"Failed to get project document record with id: {document_id}"
-            )
+            logger.error("document_not_found", document_id=document_id)
+            raise Exception(f"Failed to get project document record with id: {document_id}")
         document = document_result.data[0]
+        set_project_id(document["project_id"])
+        logger.info("document_retrieved", document_id=document_id, source_type=document.get("source_type"))
 
         # Step 1 : Download from S3 (file) or Crawl the URL (url) and Extract content.
         update_status_in_database(document_id, ProcessingStatus.PARTITIONING)
-        elements_summary, elements = download_content_and_partition(
-            document_id, document
-        )
+        elements_summary, elements = download_content_and_partition(document_id, document)
 
-        update_status_in_database(
-            document_id,
-            ProcessingStatus.CHUNKING,
-            {
-                # Storing the partitioning result to showcase in the UI.
-                ProcessingStatus.PARTITIONING.value: {
-                    "elements_found": elements_summary,
-                }
-            },
-        )
+        logger.info("partitioning_completed", document_id=document_id, elements_summary=elements_summary)
+        update_status_in_database(document_id, ProcessingStatus.CHUNKING, {ProcessingStatus.PARTITIONING.value: {"elements_found": elements_summary}})
 
         # Step 2 : Split the extracted content into chunks.
         chunks, chunking_metrics = chunk_elements_by_title(elements)
-        update_status_in_database(
-            document_id,
-            ProcessingStatus.SUMMARISING,
-            {
-                # Storing the chunking result to showcase in the UI.
-                ProcessingStatus.CHUNKING.value: chunking_metrics,
-            },
-        )
+        logger.info("chunking_completed", document_id=document_id, total_chunks=chunking_metrics["total_chunks"])
+        update_status_in_database(document_id, ProcessingStatus.SUMMARISING, {ProcessingStatus.CHUNKING.value: chunking_metrics})
 
         # Step 3 : Generate AI summaries for chunk which are Having images and tables.
         processed_chunks = summarise_chunks(chunks, document_id)
+        logger.info("summarization_completed", document_id=document_id, chunks_count=len(processed_chunks))
         update_status_in_database(document_id, ProcessingStatus.VECTORIZATION)
 
         # Step 4 : Create vector embeddings (1536 dimensions per chunk).
-        vectorize_chunks_summary_and_store_in_database(processed_chunks, document_id)
+        chunk_ids = vectorize_chunks_summary_and_store_in_database(processed_chunks, document_id)
+        logger.info("vectorization_completed", document_id=document_id, stored_chunks=len(chunk_ids))
 
         update_status_in_database(document_id, ProcessingStatus.COMPLETED)
+        logger.info("document_processing_completed", document_id=document_id, chunks_created=len(processed_chunks))
 
-        return {
-            "success": True,
-            "document_id": document_id,
-        }
+        return {"success": True, "document_id": document_id, "chunks_created": len(processed_chunks)}
     except Exception as e:
+        logger.error("document_processing_failed", document_id=document_id, error=str(e), exc_info=True)
         raise Exception(f"Failed to process document {document_id}: {str(e)}")
 
 
@@ -92,6 +71,13 @@ def update_status_in_database(
     """
     Update the project document record with the new status and details.
     """
+    logger.info(
+        "updating_document_status",
+        document_id=document_id,
+        status=status.value,
+        has_details=details is not None
+    )
+
     try:
         # Get the project document record
         document_result = (
@@ -101,6 +87,11 @@ def update_status_in_database(
             .execute()
         )
         if not document_result.data:
+            logger.error(
+                "document_not_found",
+                document_id=document_id,
+                status=status.value
+            )
             raise Exception(
                 f"Failed to get project document record with id: {document_id}"
             )
@@ -115,6 +106,11 @@ def update_status_in_database(
             current_details.update(
                 details
             )  # Note : update() - built-in dict method that merges another dictionary into the current one.
+            logger.debug(
+                "merged_processing_details",
+                document_id=document_id,
+                details_keys=list(details.keys())
+            )
 
         # Update the project document record with the new details
         document_update_result = (
@@ -130,11 +126,30 @@ def update_status_in_database(
         )
 
         if not document_update_result.data:
+            logger.error(
+                "status_update_failed",
+                document_id=document_id,
+                status=status.value
+            )
             raise Exception(
                 f"Failed to update project document record with id: {document_id}"
             )
 
+        logger.info(
+            "document_status_updated_successfully",
+            document_id=document_id,
+            status=status.value,
+            details_count=len(current_details)
+        )
+
     except Exception as e:
+        logger.error(
+            "update_status_error",
+            document_id=document_id,
+            status=status.value,
+            error=str(e),
+            exc_info=True
+        )
         raise Exception(f"Failed to update status in database: {str(e)}")
 
 
@@ -146,44 +161,39 @@ def download_content_and_partition(document_id: str, document: dict):
     Partition into elements like text, tables, images, etc. and analyze the elements summary and upload to db.
     """
     try:
-        # Get the project document record
         document_source_type = document["source_type"]
         elements = None
         temp_file_path = None
+
         if document_source_type == "file":
-            # Download the file from S3
             s3_key = document["s3_key"]
             filename = document["filename"]
             file_type = filename.split(".")[-1].lower()
-
-            # Download the file to a temporary directory - for all OS - Linux , Windows , Mac
             temp_file_path = f"/tmp/{document_id}.{file_type}"
+            logger.info("downloading_from_s3", document_id=document_id, s3_key=s3_key, file_type=file_type)
             s3_client.download_file(appConfig["s3_bucket_name"], s3_key, temp_file_path)
-
+            logger.info("s3_download_completed", document_id=document_id)
             elements = partition_document(temp_file_path, file_type)
 
         if document_source_type == "url":
-
             url = document["source_url"]
-            # Crawl the URL
+            logger.info("crawling_url", document_id=document_id, url=url)
             response = scrapingbee_client.get(url)
             temp_file_path = f"/tmp/{document_id}.html"
             with open(temp_file_path, "wb") as f:
                 f.write(response.content)
-
+            logger.info("url_crawl_completed", document_id=document_id)
             elements = partition_document(temp_file_path, "html", source_type="url")
 
         elements_summary = analyze_elements(elements)
-
-        # Delete the temprary file
+        logger.info("elements_analyzed", document_id=document_id, elements_count=len(elements))
         os.remove(temp_file_path)
 
         return elements_summary, elements
 
     except Exception as e:
-        raise Exception(
-            f"Failed in Step 1 to download content and partition elements: {str(e)}"
-        )
+        logger.error("download_and_partition_failed", document_id=document_id, error=str(e), exc_info=True)
+        raise Exception(f"Failed in Step 1 to download content and partition elements: {str(e)}")
 
 
 def chunk_elements_by_title(elements):
@@ -305,28 +315,32 @@ def vectorize_chunks_summary_and_store_in_database(processed_chunks, document_id
         # Edge case : More chunks < More API calls. In Case we exceed the API limit. We will generate in batches.
         batch_size = 10
         all_vectorized_embeddings = []
+        logger.info("vectorization_started", document_id=document_id, total_chunks=len(ai_summary_list), batch_size=batch_size)
 
         for start in range(0, len(ai_summary_list), batch_size):
 
             # Splits into chunks of batch_size - 10
             end = start + batch_size
-            batch_texts = ai_summary_list[start:end]  # We get the chunks of 10 or less.
+            batch_texts = ai_summary_list[start:end]
+            batch_num = (start // batch_size) + 1
+            total_batches = (len(ai_summary_list) + batch_size - 1) // batch_size
 
             # Simple retry with exponential backoff
             attempt = 0
             while True:
                 try:
                     embeddings = openAI["embeddings"].embed_documents(batch_texts)
-                    # As
-                    all_vectorized_embeddings.extend(
-                        embeddings
-                    )  # 'extend' - built-in list method that adds multiple elements to the end of the list.
+                    all_vectorized_embeddings.extend(embeddings)  # 'extend' - built-in list method that adds multiple elements to the end of the list.
+                    logger.info("batch_vectorized", document_id=document_id, batch=f"{batch_num}/{total_batches}", chunks_in_batch=len(batch_texts))
                     break
                 except Exception as e:
                     attempt += 1
                     if attempt >= 3:
+                        logger.error("vectorization_batch_failed", document_id=document_id, batch=batch_num, attempt=attempt, error=str(e), exc_info=True)
                         raise e
-                    time.sleep(2**attempt)
+                    wait_time = 2**attempt
+                    logger.warning("vectorization_retry", document_id=document_id, batch=batch_num, attempt=attempt, wait_seconds=wait_time)
+                    time.sleep(wait_time)
 
         # Step 2 : Storing Chunks with Embeddings
         # chunk_embedding_pairs: list of tuples (processed_chunk, embedding_vector)
@@ -338,6 +352,7 @@ def vectorize_chunks_summary_and_store_in_database(processed_chunks, document_id
         # ]
         chunk_embedding_pairs = list(zip(processed_chunks, all_vectorized_embeddings))
         stored_chunk_ids = []
+        logger.info("storing_chunks_started", document_id=document_id, total_chunks=len(chunk_embedding_pairs))
 
         for i, (processed_chunk, embedding_vector) in enumerate(chunk_embedding_pairs):
             # Add document_id, chunk_index, and embedding to each processed_chunk
@@ -349,22 +364,13 @@ def vectorize_chunks_summary_and_store_in_database(processed_chunks, document_id
             #     "chunk_index": 0,
             #     "embedding": [0.123, -0.456, 0.789, 0.234, ...]  # 1536 dimensions
             # }
-            chunk_data_with_embedding = {
-                **processed_chunk,
-                "document_id": document_id,
-                "chunk_index": i,
-                "embedding": embedding_vector,
-            }
-
-            result = (
-                supabase.table("document_chunks")
-                .insert(chunk_data_with_embedding)
-                .execute()
-            )
+            chunk_data_with_embedding = {**processed_chunk, "document_id": document_id, "chunk_index": i, "embedding": embedding_vector}
+            result = supabase.table("document_chunks").insert(chunk_data_with_embedding).execute()
             stored_chunk_ids.append(result.data[0]["id"])
 
-        # print(f"Successfully stored {len(processed_chunks)} chunks with embeddings")
+        logger.info("chunks_stored_successfully", document_id=document_id, stored_count=len(stored_chunk_ids))
         return stored_chunk_ids
 
     except Exception as e:
+        logger.error("vectorization_and_storage_failed", document_id=document_id, error=str(e), exc_info=True)
         raise Exception(f"Failed to vectorize chunks and store in database: {str(e)}")

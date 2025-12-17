@@ -7,7 +7,9 @@ from src.config.index import appConfig
 from src.services.awsS3 import s3_client
 import uuid
 from src.services.celery import perform_rag_ingestion_task
+from src.config.logging import get_logger, set_project_id
 
+logger = get_logger(__name__)
 
 router = APIRouter(tags=["projectFilesRoutes"])
 
@@ -33,7 +35,9 @@ async def get_project_files(
     * 2. Select all project documents from the project documents table for given project_id
     * 3. Return project documents data
     """
+    set_project_id(project_id)
     try:
+        logger.info("fetching_project_files", user_id=current_user_clerk_id)
         project_files_result = (
             supabase.table("project_documents")
             .select("*")
@@ -46,6 +50,7 @@ async def get_project_files(
         # * If there are no project documents for the project, return an empty list
         # * A User may or may not have any project files.
 
+        logger.info("project_files_retrieved", file_count=len(project_files_result.data or []))
         return {
             "message": "Project files retrieved successfully",
             "data": project_files_result.data or [],
@@ -55,6 +60,7 @@ async def get_project_files(
         raise e
 
     except Exception as e:
+        logger.error("project_files_retrieval_error", error=str(e), exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"An internal server error occurred while retrieving project {project_id} files: {str(e)}",
@@ -75,7 +81,9 @@ async def get_upload_presigned_url(
     * 4. Create project document record with pending status
     * 5. Return presigned url
     """
+    set_project_id(project_id)
     try:
+        logger.info("generating_upload_url", filename=file_upload_request.filename, file_size=file_upload_request.file_size)
         # Verify project exists and belongs to the current user
         project_ownership_verification_result = (
             supabase.table("projects")
@@ -86,6 +94,7 @@ async def get_upload_presigned_url(
         )
 
         if not project_ownership_verification_result.data:
+            logger.warning("project_not_found_for_upload", user_id=current_user_clerk_id)
             raise HTTPException(
                 status_code=404,
                 detail="Project not found or you don't have permission to upload files to this project",
@@ -116,6 +125,7 @@ async def get_upload_presigned_url(
         )
 
         if not presigned_url:
+            logger.error("presigned_url_generation_failed", s3_key=s3_key)
             raise HTTPException(
                 status_code=422,
                 detail="Failed to generate upload presigned url",
@@ -139,11 +149,13 @@ async def get_upload_presigned_url(
         )
 
         if not document_creation_result.data:
+            logger.error("document_record_creation_failed", filename=file_upload_request.filename, reason="no_data_returned")
             raise HTTPException(
                 status_code=422,
                 detail="Failed to create project document - invalid data provided",
             )
 
+        logger.info("upload_url_generated_successfully", document_id=document_creation_result.data[0]["id"], s3_key=s3_key)
         return {
             "message": "Upload presigned url generated successfully",
             "data": {
@@ -157,6 +169,7 @@ async def get_upload_presigned_url(
         raise e
 
     except Exception as e:
+        logger.error("upload_url_generation_error", filename=file_upload_request.filename, error=str(e), exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"An internal server error occurred while generating upload presigned url for {project_id}: {str(e)}",
@@ -178,9 +191,12 @@ async def confirm_file_upload_to_s3(
     * 5. Update the project document record with the task_id
     * 6. Return successfully confirmed file upload data
     """
+    set_project_id(project_id)
     try:
         s3_key = confirm_file_upload_request.get("s3_key")
+        logger.info("confirming_file_upload", s3_key=s3_key)
         if not s3_key:
+            logger.warning("s3_key_missing")
             raise HTTPException(
                 status_code=400,
                 detail="S3 key is required",
@@ -197,6 +213,7 @@ async def confirm_file_upload_to_s3(
         )
 
         if not document_verification_result.data:
+            logger.warning("file_not_found_for_confirmation", s3_key=s3_key)
             raise HTTPException(
                 status_code=404,
                 detail="File not found or you don't have permission to confirm upload to S3 for this file",
@@ -218,6 +235,7 @@ async def confirm_file_upload_to_s3(
         document_id = document_update_result.data[0]["id"]
         task_result = perform_rag_ingestion_task.delay(document_id)
         task_id = task_result.id
+        logger.info("rag_ingestion_task_queued", document_id=document_id, task_id=task_id)
 
         document_update_result = (
             supabase.table("project_documents")
@@ -230,11 +248,13 @@ async def confirm_file_upload_to_s3(
             .execute()
         )
         if not document_update_result.data:
+            logger.error("task_id_update_failed", document_id=document_id, task_id=task_id, reason="no_data_returned")
             raise HTTPException(
                 status_code=422,
                 detail="Failed to update project document record with task_id",
             )
 
+        logger.info("file_upload_confirmed_successfully", document_id=document_id, task_id=task_id)
         return {
             "message": "File upload to S3 confirmed successfully And Started Background Pre-Processing of this file",
             "data": document_update_result.data[0],
@@ -244,6 +264,7 @@ async def confirm_file_upload_to_s3(
         raise e
 
     except Exception as e:
+        logger.error("file_confirmation_error", s3_key=s3_key, error=str(e), exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"An internal server error occurred while confirming upload to S3 for {project_id}: {str(e)}",
@@ -263,6 +284,7 @@ async def process_url(
     * 3. Start background pre-processing of this URL
     * 4. Return successfully processed URL data
     """
+    set_project_id(project_id)
     try:
         # Validate URL
         url = url.url
@@ -271,7 +293,9 @@ async def process_url(
         else:
             url = f"https://{url}"
 
+        logger.info("processing_url", url=url)
         if not validate_url(url):
+            logger.warning("invalid_url", url=url)
             raise HTTPException(
                 status_code=400,
                 detail="Invalid URL",
@@ -297,6 +321,7 @@ async def process_url(
         )
 
         if not document_creation_result.data:
+            logger.error("url_document_creation_failed", url=url, reason="no_data_returned")
             raise HTTPException(
                 status_code=422,
                 detail="Failed to create project document with URL Record - invalid data provided",
@@ -306,6 +331,7 @@ async def process_url(
         document_id = document_creation_result.data[0]["id"]
         task_result = perform_rag_ingestion_task.delay(document_id)
         task_id = task_result.id
+        logger.info("url_ingestion_task_queued", document_id=document_id, task_id=task_id, url=url)
 
         document_update_result = (
             supabase.table("project_documents")
@@ -319,11 +345,13 @@ async def process_url(
         )
 
         if not document_update_result.data:
+            logger.error("url_task_id_update_failed", document_id=document_id, task_id=task_id, reason="no_data_returned")
             raise HTTPException(
                 status_code=422,
                 detail="Failed to update project document record with task_id",
             )
 
+        logger.info("url_processed_successfully", document_id=document_id, url=url, task_id=task_id)
         return {
             "message": "Website URL added to database successfully And Started Background Pre-Processing of this URL",
             "data": document_creation_result.data[0],
@@ -333,6 +361,7 @@ async def process_url(
         raise e
 
     except Exception as e:
+        logger.error("url_processing_error", url=url, error=str(e), exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"An internal server error occurred while processing urls for {project_id}: {str(e)}",
@@ -352,7 +381,9 @@ async def delete_project_document(
     * 3. Delete document from database
     * 4. Return successfully deleted document data
     """
+    set_project_id(project_id)
     try:
+        logger.info("deleting_document", file_id=file_id, user_id=current_user_clerk_id)
         # Verify document exists and belongs to the current user and Take complete project document record
         document_ownership_verification_result = (
             supabase.table("project_documents")
@@ -364,6 +395,7 @@ async def delete_project_document(
         )
 
         if not document_ownership_verification_result.data:
+            logger.warning("document_not_found_for_deletion", file_id=file_id)
             raise HTTPException(
                 status_code=404,
                 detail="Document not found or you don't have permission to delete this document",
@@ -372,6 +404,7 @@ async def delete_project_document(
         # Delete file from S3 (only for actual files, not for URLs)
         s3_key = document_ownership_verification_result.data[0]["s3_key"]
         if s3_key:
+            logger.info("deleting_from_s3", file_id=file_id, s3_key=s3_key)
             s3_client.delete_object(Bucket=appConfig["s3_bucket_name"], Key=s3_key)
 
         # Delete document from database
@@ -385,11 +418,13 @@ async def delete_project_document(
         )
 
         if not document_deletion_result.data:
+            logger.error("document_deletion_failed", file_id=file_id, reason="no_data_returned")
             raise HTTPException(
                 status_code=404,
                 detail="Failed to delete document",
             )
 
+        logger.info("document_deleted_successfully", file_id=file_id)
         return {
             "message": "Document deleted successfully",
             "data": document_deletion_result.data[0],
@@ -399,6 +434,7 @@ async def delete_project_document(
         raise e
 
     except Exception as e:
+        logger.error("document_deletion_error", file_id=file_id, error=str(e), exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"An internal server error occurred while deleting project document {file_id} for {project_id}: {str(e)}",
@@ -417,7 +453,9 @@ async def get_project_document_chunks(
     * 2. Get project document chunks
     * 3. Return project document chunks data
     """
+    set_project_id(project_id)
     try:
+        logger.info("fetching_document_chunks", file_id=file_id, user_id=current_user_clerk_id)
         # Verify document exists and belongs to the current user and Take complete project document record
         document_ownership_verification_result = (
             supabase.table("project_documents")
@@ -429,6 +467,7 @@ async def get_project_document_chunks(
         )
 
         if not document_ownership_verification_result.data:
+            logger.warning("document_not_found_for_chunks", file_id=file_id)
             raise HTTPException(
                 status_code=404,
                 detail="Document not found or you don't have permission to delete this document",
@@ -442,6 +481,7 @@ async def get_project_document_chunks(
             .execute()
         )
 
+        logger.info("document_chunks_retrieved", file_id=file_id, chunk_count=len(document_chunks_result.data or []))
         return {
             "message": "Project document chunks retrieved successfully",
             "data": document_chunks_result.data or [],
@@ -451,6 +491,7 @@ async def get_project_document_chunks(
         raise e
 
     except Exception as e:
+        logger.error("document_chunks_retrieval_error", file_id=file_id, error=str(e), exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"An internal server error occurred while getting project document chunks for {file_id} for {project_id}: {str(e)}",
