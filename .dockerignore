@@ -1,0 +1,69 @@
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv
+venv/
+ENV/
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+npm-debug.log
+
+# Environment
+.env
+.env.*
+!.env.sample
+
+# Docker
+**/docker-compose*
+**/compose.y*ml
+**/Dockerfile*
+
+# Dependencies
+**/node_modules
+
+# Build artifacts
+**/obj
+
+# Secrets & local config
+**/secrets.dev.yaml
+**/values.dev.yaml
+
+# Project specific
+evaluation/
+notebooks/
+redis/
+supabase/
+
+# Docs
+LICENSE
+README.md
+*.md
+
+# Git
+.git
+.gitignore
