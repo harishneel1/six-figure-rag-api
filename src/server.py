@@ -18,6 +18,7 @@ app = FastAPI(
     title="Six-Figure AI Engineering API",
     description="Backend API for Six-Figure AI Engineering application",
     version="1.0.0",
+    redirect_slashes=False,  # Add this line
 )
 
 # Add logging middleware (should be first to capture all requests)
