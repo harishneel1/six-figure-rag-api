@@ -1,5 +1,7 @@
 ## 💻 Local-Setup Architecture
 
+> 📊 Architecture diagrams in this guide contributed by [@rajatevencodes](https://github.com/rajatevencodes)
+
 <p align="center">
   <img src="https://ik.imagekit.io/5wegcvcxp/Resume-Multi-modal-rag/Local-Architecture.png" alt="Local Setup Architecture" width="100%" height="100%">
 </p>
@@ -302,3 +304,5 @@ make logs-worker
 | `make logs-api`         | View API server logs                       |
 | `make logs-redis`       | View Redis logs                            |
 | `make logs-worker`      | View worker logs                           |
+
+</details>
